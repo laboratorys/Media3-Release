@@ -23,6 +23,7 @@ jobs:
       - name: Build AAR
         run: |
           ./gradlew assembleRelease
+          mkdir -p "$TARGET_DIR"
           echo "Source dir: $SOURCE_DIR"
           echo "Target dir: $TARGET_DIR"
           echo "Move list: $MOVE_LIST"
@@ -41,3 +42,18 @@ jobs:
         with:
           name: lib-aars
           path: ${{ env.TARGET_DIR }}
+      - name: Generate current time
+        id: datetime
+        run: echo "CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+      - name: 🚀 Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v1.8.0-fongmi"
+          name: "📱 Release v1.8.0-fongmi"
+          body: |
+            ✨ Media3 fongmi AAR Build
+            - Version: v1.8.0-fongmi
+            - Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
+          files: |
+            ${{ github.workspace }}/target/*.aar
+          token: ${{ secrets.GITHUB_TOKEN }}
