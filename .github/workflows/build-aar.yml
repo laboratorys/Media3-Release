@@ -31,13 +31,13 @@ jobs:
         run: |
           if [ "$FORCE_BUILD" = "true" ]; then
            echo "::notice::手动触发强制构建，跳过 commit 检查"
-           echo "::set-output name=should_build::true"
+            echo "should_build=true" >> $GITHUB_OUTPUT
            exit 0
           fi
           LATEST_COMMIT=$(curl -sH "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/$SOURCE_REPO/commits/$SOURCE_BRANCH" | jq -r '.sha')
           echo "Latest commit: $LATEST_COMMIT"
-          echo "::set-output name=commit::$LATEST_COMMIT"
+          echo "commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
           
           if [ -f .last_known_commit ]; then
             LAST_KNOWN=$(cat .last_known_commit)
@@ -48,9 +48,9 @@ jobs:
           fi
           
           if [ "$LATEST_COMMIT" != "$LAST_KNOWN" ]; then
-            echo "::set-output name=should_build::true"
+            echo "should_build=true" >> $GITHUB_OUTPUT
           else
-           echo "::set-output name=should_build::false"
+           echo "should_build=false" >> $GITHUB_OUTPUT
           fi
       - name: ⏩ Skip build if no changes
         if: steps.check-build.outputs.should_build == 'false'
@@ -116,7 +116,7 @@ jobs:
           echo ""
           echo "🔏 MD5 Checksums:"
           cat "$HASH_FILE"
-      - name: Upload artifacts
+      - name: 📤 Upload artifacts
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -128,14 +128,14 @@ jobs:
         if: steps.fetch-commit.outputs.should_build == 'true'
         id: datetime
         run: |
-          CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          CURRENT_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')
           echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
       - name: 🗜️ Upload to Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v1.8.0-fongmi"
-          name: "📱 Media3 Release v1.8.0-fongmi"
+          name: "📱 Media3 Release"
           body: |
             ✨ **Media3 fongmi AAR Build** ✨
             
