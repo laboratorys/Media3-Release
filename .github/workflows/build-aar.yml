@@ -63,6 +63,10 @@ jobs:
       - name: 💾 Persist new commit hash
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "🛑 手动执行模式：跳过 .last_known_commit 更新"
+            exit 0
+          fi
           mkdir -p $(dirname .last_known_commit)
            if [ ! -f .last_known_commit ] || 
               [ "$(cat .last_known_commit)" != "${{ steps.fetch-commit.outputs.commit }}" ]; then
@@ -98,7 +102,7 @@ jobs:
           echo "🎯 Target dir: $TARGET_DIR"
           echo "📋 Move list: $MOVE_LIST"
           echo "# 📝 MD5 Checksums" > "$HASH_FILE"
-          echo "# Generated at $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$HASH_FILE"
+          echo "# Generated at $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')" >> "$HASH_FILE"
           echo "" >> "$HASH_FILE"
           find "$LIB_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
