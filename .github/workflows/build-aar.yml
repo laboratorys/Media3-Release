@@ -117,8 +117,10 @@ jobs:
         if: steps.fetch-commit.outputs.should_build == 'true'
         id: datetime
         run: |
-          echo "CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          echo "BUILD_INFO=$(echo -e "🛠️ Built with GitHub Actions\n⏰ Build Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n🌐 Runner: ${{ runner.os }}")" >> $GITHUB_OUTPUT
+          CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          BUILD_INFO="🛠️ Built with GitHub Actions%0A⏰ Build Time: $CURRENT_TIME%0A🌐 Runner: ${{ runner.os }}"
+          echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
+          echo "BUILD_INFO=$BUILD_INFO" >> $GITHUB_OUTPUT
       - name: 🚀 Upload to Release
         if: steps.fetch-commit.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
