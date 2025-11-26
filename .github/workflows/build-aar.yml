@@ -104,7 +104,7 @@ jobs:
             filename=$(basename "$aar_file")
             if grep -qFx "$filename" "$MOVE_LIST"; then
               cp -v "$aar_file" "$TARGET_DIR/"
-              md5sum "$aar_file" | awk '{print $2 " " $1}' >> "$HASH_FILE"
+              md5sum "$aar_file" | awk -v filename=$(basename "$aar_file") '{print filename " " $1}' >> "$HASH_FILE"
               echo "✅ Copied: $filename"
             else
               echo "⏩ Skipped: $filename"
@@ -129,9 +129,7 @@ jobs:
         id: datetime
         run: |
           CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          BUILD_INFO="🛠️ Built with GitHub Actions%0A⏰ Build Time: $CURRENT_TIME%0A🌐 Runner: ${{ runner.os }}"
           echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
-          echo "BUILD_INFO=$BUILD_INFO" >> $GITHUB_OUTPUT
       - name: 🗜️ Upload to Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
@@ -145,18 +143,6 @@ jobs:
             - 🏷️ Version: v1.8.0-fongmi
             - 📅 Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
             - 🔐 Checksum: [hash.txt](https://github.com/${{ github.repository }}/releases/download/v1.8.0-fongmi/hash.txt)
-            
-            ### 📝 MD5 Checksums
-            ```
-            $(cat ${{ env.HASH_FILE }} | grep -v "#")
-            ```
-            
-            ### 🛠️ Build Details
-            ${{ steps.datetime.outputs.BUILD_INFO }}
-            
-            ### 📚 Included AARs
-            $(ls -1 ${{ env.TARGET_DIR }}/*.aar | xargs -n1 basename | awk '{print "- " $0}')
-
           files: |
             ${{ env.TARGET_DIR }}/*.aar
             ${{ env.HASH_FILE }}
