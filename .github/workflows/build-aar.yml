@@ -65,8 +65,13 @@ jobs:
         run: |
           mkdir -p $(dirname .last_known_commit)
           echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if ! grep -q "_source/" .gitignore; then
+            echo "_source/" >> .gitignore
+            git add .gitignore
+            git commit -m "Add _source to gitignore [skip ci]"
+          fi
           git pull --rebase
           git add .last_known_commit
           git commit -m "Update tracked commit to ${{ steps.fetch-commit.outputs.commit }} [skip ci]"
