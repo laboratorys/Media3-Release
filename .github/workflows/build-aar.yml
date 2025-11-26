@@ -132,8 +132,8 @@ jobs:
           BUILD_INFO="🛠️ Built with GitHub Actions%0A⏰ Build Time: $CURRENT_TIME%0A🌐 Runner: ${{ runner.os }}"
           echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
           echo "BUILD_INFO=$BUILD_INFO" >> $GITHUB_OUTPUT
-      - name: 🚀 Upload to Release
-        if: steps.fetch-commit.outputs.changed == 'true'
+      - name: 🗜️ Upload to Release
+        if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v1.8.0-fongmi"
