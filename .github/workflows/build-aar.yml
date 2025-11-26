@@ -1,37 +1,95 @@
 name: 📦 Build and Release
 on:
-  workflow_dispatch: # 手动触发
+  schedule:
+    - cron: '* */1 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "跳过 commit 检查强制构建"
+        required: false
+        default: "true"
 jobs:
   build:
     runs-on: ubuntu-latest
     env:  # 全局环境变量
-      SOURCE_DIR: ${{ github.workspace }}/libraries  # 使用 GitHub 预定义的工作目录
-      TARGET_DIR: ${{ github.workspace }}/target
-      MOVE_LIST: ${{ github.workspace }}/move.txt
-      HASH_FILE: ${{ github.workspace }}/target/hash.txt
+      SOURCE_REPO: "FongMi/media"
+      SOURCE_BRANCH: "1.8.0-fongmi"
+      SOURCE_DIR: ${{ github.workspace }}/_source
+      LIB_DIR: ${{ github.workspace }}/_source/libraries  # 使用 GitHub 预定义的工作目录
+      TARGET_DIR: ${{ github.workspace }}/_source/target
+      MOVE_LIST: ${{ github.workspace }}/_source/move.txt
+      HASH_FILE: ${{ github.workspace }}/_source/target/hash.txt
+      FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' }}
     steps:
       - name: 🛎️ Checkout repository
         uses: actions/checkout@v5
         with:
-          repository: FongMi/media
-          ref: 1.8.0-fongmi
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: 🔍 Fetch latest commit from FongMi/media
+        id: fetch-commit
+        run: |
+          if [ "$FORCE_BUILD" = "true" ]; then
+           echo "::notice::手动触发强制构建，跳过 commit 检查"
+           echo "::set-output name=should_build::true"
+           exit 0
+          fi
+          LATEST_COMMIT=$(curl -sH "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$SOURCE_REPO/commits/$SOURCE_BRANCH" | jq -r '.sha')
+          echo "Latest commit: $LATEST_COMMIT"
+          echo "::set-output name=commit::$LATEST_COMMIT"
+          
+          if [ -f .last_known_commit ]; then
+            LAST_KNOWN=$(cat .last_known_commit)
+            echo "Last known commit: $LAST_KNOWN"
+          else
+            LAST_KNOWN=""
+            echo "No previous commit record found"
+          fi
+          
+          if [ "$LATEST_COMMIT" != "$LAST_KNOWN" ]; then
+            echo "::set-output name=should_build::true"
+          else
+           echo "::set-output name=should_build::false"
+          fi
+      - name: ⏩ Skip build if no changes
+        if: steps.check-build.outputs.should_build == 'false'
+        run: echo "🔄 No new commits, skipping build."
+      - name: 🛠️ Clone FongMi/media
+        if: steps.fetch-commit.outputs.should_build == 'true'
+        run: |
+          git clone --depth 1 --branch $SOURCE_BRANCH \
+          https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/$SOURCE_REPO.git $SOURCE_DIR
+      - name: 💾 Persist new commit hash
+        if: steps.fetch-commit.outputs.should_build == 'true'
+        run: |
+          mkdir -p $(dirname .last_known_commit)
+          echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git pull --rebase
+          git add .last_known_commit
+          git commit -m "Update tracked commit to ${{ steps.fetch-commit.outputs.commit }} [skip ci]"
+          for i in {1..3}; do git push origin ${{ github.ref }} && break || sleep 5; done
       - name: ☕ Set up JDK 17
+        if: steps.fetch-commit.outputs.should_build == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: 17
           distribution: 'temurin'
       - name: 🔨 Build AAR
+        if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
+          cd $SOURCE_DIR
           ./gradlew assembleRelease
           mkdir -p "$TARGET_DIR"
-          echo "🔍 Source dir: $SOURCE_DIR"
+          echo "🔍 Source dir: $LIB_DIR"
           echo "🎯 Target dir: $TARGET_DIR"
           echo "📋 Move list: $MOVE_LIST"
           echo "# 📝 MD5 Checksums" > "$HASH_FILE"
           echo "# Generated at $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$HASH_FILE"
           echo "" >> "$HASH_FILE"
-          find "$SOURCE_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
+          find "$LIB_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
             if grep -qFx "$filename" "$MOVE_LIST"; then
               cp -v "$aar_file" "$TARGET_DIR/"
@@ -48,6 +106,7 @@ jobs:
           echo "🔏 MD5 Checksums:"
           cat "$HASH_FILE"
       - name: Upload artifacts
+        if: steps.fetch-commit.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: lib-aars
@@ -55,11 +114,13 @@ jobs:
             ${{ env.TARGET_DIR }}/*.aar
             ${{ env.HASH_FILE }}
       - name: ⏱️ Generate current time
+        if: steps.fetch-commit.outputs.should_build == 'true'
         id: datetime
         run: |
           echo "CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
           echo "BUILD_INFO=$(echo -e "🛠️ Built with GitHub Actions\n⏰ Build Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n🌐 Runner: ${{ runner.os }}")" >> $GITHUB_OUTPUT
       - name: 🚀 Upload to Release
+        if: steps.fetch-commit.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v1.8.0-fongmi"
