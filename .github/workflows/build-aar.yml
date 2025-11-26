@@ -1,4 +1,4 @@
-name: Build and Release
+name: 📦 Build and Release
 on:
   workflow_dispatch: # 手动触发
 jobs:
@@ -8,52 +8,82 @@ jobs:
       SOURCE_DIR: ${{ github.workspace }}/libraries  # 使用 GitHub 预定义的工作目录
       TARGET_DIR: ${{ github.workspace }}/target
       MOVE_LIST: ${{ github.workspace }}/move.txt
+      HASH_FILE: ${{ github.workspace }}/target/hash.txt
     steps:
-      - name: Checkout repository
+      - name: 🛎️ Checkout repository
         uses: actions/checkout@v5
         with:
           repository: FongMi/media
           ref: 1.8.0-fongmi
           fetch-depth: 0
-      - name: Set up JDK 17
+      - name: ☕ Set up JDK 17
         uses: actions/setup-java@v5
         with:
           java-version: 17
           distribution: 'temurin'
-      - name: Build AAR
+      - name: 🔨 Build AAR
         run: |
           ./gradlew assembleRelease
           mkdir -p "$TARGET_DIR"
-          echo "Source dir: $SOURCE_DIR"
-          echo "Target dir: $TARGET_DIR"
-          echo "Move list: $MOVE_LIST"
+          echo "🔍 Source dir: $SOURCE_DIR"
+          echo "🎯 Target dir: $TARGET_DIR"
+          echo "📋 Move list: $MOVE_LIST"
+          echo "# 📝 MD5 Checksums" > "$HASH_FILE"
+          echo "# Generated at $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$HASH_FILE"
+          echo "" >> "$HASH_FILE"
           find "$SOURCE_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
             if grep -qFx "$filename" "$MOVE_LIST"; then
               cp -v "$aar_file" "$TARGET_DIR/"
+              md5sum "$aar_file" | awk '{print $2 " " $1}' >> "$HASH_FILE"
+              echo "✅ Copied: $filename"
             else
-              echo "Skipped: $filename"
+              echo "⏩ Skipped: $filename"
             fi
           done
-          echo "📦 生成的AAR文件："
-          ls -lh $TARGET_DIR
+          echo ""
+          echo "📦 Generated AAR files:"
+          ls -lh "$TARGET_DIR"
+          echo ""
+          echo "🔏 MD5 Checksums:"
+          cat "$HASH_FILE"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: lib-aars
-          path: ${{ env.TARGET_DIR }}
-      - name: Generate current time
+          path: |
+            ${{ env.TARGET_DIR }}/*.aar
+            ${{ env.HASH_FILE }}
+      - name: ⏱️ Generate current time
         id: datetime
-        run: echo "CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+        run: |
+          echo "CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "BUILD_INFO=$(echo -e "🛠️ Built with GitHub Actions\n⏰ Build Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n🌐 Runner: ${{ runner.os }}")" >> $GITHUB_OUTPUT
       - name: 🚀 Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v1.8.0-fongmi"
-          name: "📱 Release v1.8.0-fongmi"
+          name: "📱 Media3 Release v1.8.0-fongmi"
           body: |
-            ✨ Media3 fongmi AAR Build
-            - Version: v1.8.0-fongmi
-            - Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
+            ✨ **Media3 fongmi AAR Build** ✨
+            
+            ### 📦 Release Info
+            - 🏷️ Version: v1.8.0-fongmi
+            - 📅 Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
+            - 🔐 Checksum: [hash.txt](https://github.com/${{ github.repository }}/releases/download/v1.8.0-fongmi/hash.txt)
+            
+            ### 📝 MD5 Checksums
+            ```
+            $(cat ${{ env.HASH_FILE }} | grep -v "#")
+            ```
+            
+            ### 🛠️ Build Details
+            ${{ steps.datetime.outputs.BUILD_INFO }}
+            
+            ### 📚 Included AARs
+            $(ls -1 ${{ env.TARGET_DIR }}/*.aar | xargs -n1 basename | awk '{print "- " $0}')
+
           files: |
-            ${{ github.workspace }}/target/*.aar
+            ${{ env.TARGET_DIR }}/*.aar
+            ${{ env.HASH_FILE }}
           token: ${{ secrets.GITHUB_TOKEN }}
