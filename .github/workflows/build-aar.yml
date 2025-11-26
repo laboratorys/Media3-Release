@@ -4,7 +4,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:  # 全局环境变量
+      SOURCE_DIR: ${{ github.workspace }}/libraries  # 使用 GitHub 预定义的工作目录
+      TARGET_DIR: ${{ github.workspace }}/target
+      MOVE_LIST: ${{ github.workspace }}/move.txt
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -17,8 +20,24 @@ jobs:
         with:
           java-version: 17
           distribution: 'temurin'
-
       - name: Build AAR
         run: |
           ./gradlew assembleRelease
-          ls -n
+          echo "Source dir: $SOURCE_DIR"
+          echo "Target dir: $TARGET_DIR"
+          echo "Move list: $MOVE_LIST"
+          find "$SOURCE_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
+            filename=$(basename "$aar_file")
+            if grep -qFx "$filename" "$MOVE_LIST"; then
+              cp -v "$aar_file" "$TARGET_DIR/"
+            else
+              echo "Skipped: $filename"
+            fi
+          done
+          echo "📦 生成的AAR文件："
+          ls -lh $TARGET_DIR
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-aars
+          path: ${{ env.TARGET_DIR }}
