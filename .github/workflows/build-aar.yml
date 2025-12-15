@@ -134,6 +134,44 @@ jobs:
         run: |
           CURRENT_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')
           echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
+      - name: 📦 Publish All AARs to GitHub Packages
+        if: steps.fetch-commit.outputs.should_build == 'true'
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROUP_ID: com.fongmi.media3
+          VERSION: 1.8.0-fongmi
+          REPO_URL: https://maven.pkg.github.com/${{ github.repository }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y maven
+
+          while IFS= read -r artifact; do
+            [ -z "$artifact" ] && continue
+            echo "➡️ Processing AAR: $artifact"
+
+            AAR_PATH="$TARGET_DIR/$artifact"
+            if [ ! -f "$AAR_PATH" ]; then
+              echo "⚠️ File not found: $AAR_PATH"
+              continue
+            fi
+
+            # 提取 artifactId（去掉后缀 -release.aar → lib-core）
+            ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//')
+            echo "📤 Deploying $GROUP_ID:$ARTIFACT_ID:$VERSION"
+
+            mvn deploy:deploy-file \
+              -Dfile="$AAR_PATH" \
+              -DgroupId=$GROUP_ID \
+              -DartifactId=$ARTIFACT_ID \
+              -Dversion=$VERSION \
+              -Dpackaging=aar \
+              -DrepositoryId=github \
+              -Durl=$REPO_URL \
+              -DretryFailedDeploymentCount=3 || {
+                echo "❌ Failed to upload $artifact"
+                exit 1
+              }
+          done < "$MOVE_LIST"
       - name: 🗜️ Upload to Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
