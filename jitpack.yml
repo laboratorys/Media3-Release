@@ -1,38 +1,4 @@
-jitpack: true
-modules:
-  - name: lib-common
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-container
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-database
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-datasource-okhttp
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-datasource
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-datasource-rtmp
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-decoder-av1
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-decoder-iamf
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-decoder-mpegh
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-decoder
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-effect
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-exoplayer-dash
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-exoplayer-hls
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-exoplayer
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-exoplayer-rtsp
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-exoplayer-smoothstreaming
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-extractor
-    groupId: com.github.laboratorys.Media3-Release
-  - name: lib-ui
-    groupId: com.github.laboratorys.Media3-Release
+jdk:
+  - openjdk11
+install:
+  - echo "跳过构建，直接使用 Release 中的 AAR 文件"
