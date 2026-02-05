@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:  # 全局环境变量
       SOURCE_REPO: "FongMi/media"
-      SOURCE_BRANCH: "1.8.0-fongmi"
+      SOURCE_BRANCH: "release-1.9.1-fongmi"
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries  # 使用 GitHub 预定义的工作目录
       TARGET_DIR: ${{ github.workspace }}/_source/target
@@ -140,7 +140,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GROUP_ID: com.fongmi.media3
-          VERSION: 1.8.0-fongmi
+          VERSION: release-1.9.1-fongmi
           REPO_URL: https://maven.pkg.github.com/${{ github.repository }}
         run: |
           sudo apt-get update && sudo apt-get install -y maven
@@ -176,15 +176,15 @@ jobs:
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v1.8.0-fongmi"
+          tag_name: "v1.9.1-fongmi"
           name: "📱 Media3 Release"
           body: |
             ✨ **Media3 fongmi AAR Build** ✨
             
             ### 📦 Release Info
-            - 🏷️ Version: v1.8.0-fongmi
+            - 🏷️ Version: v1.9.1-fongmi
             - 📅 Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
-            - 🔐 Checksum: [hash.txt](https://github.com/${{ github.repository }}/releases/download/v1.8.0-fongmi/hash.txt)
+            - 🔐 Checksum: [hash.txt](https://github.com/${{ github.repository }}/releases/download/v1.9.1-fongmi/hash.txt)
           files: |
             ${{ env.TARGET_DIR }}/*.aar
             ${{ env.HASH_FILE }}
