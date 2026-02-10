@@ -70,7 +70,8 @@ jobs:
           cd $SOURCE_DIR
           ./gradlew assembleRelease
           mkdir -p "$TARGET_DIR"
-          
+          SH_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
+          echo "BUILD_TIME=$SH_TIME" >> $GITHUB_ENV
           echo "# 📝 MD5 Checksums" > "$HASH_FILE"
           echo "# Generated at $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')" >> "$HASH_FILE"
           
@@ -82,37 +83,33 @@ jobs:
             echo "$filename" >> "$AAR_LIST_FILE"
           done
 
-      - name: 📦 Publish All AARs
+      - name: 🚀 Push to Maven Branch
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
-          # 动态配置 Maven 认证
-          mkdir -p ~/.m2
-          cat <<EOF > ~/.m2/settings.xml
-          <settings>
-            <servers>
-              <server>
-                <id>github</id>
-                <username>${{ github.actor }}</username>
-                <password>${{ secrets.GITHUB_TOKEN }}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-
+          mkdir -p $GITHUB_WORKSPACE/repo-deploy
+          cd $GITHUB_WORKSPACE/repo-deploy
+          
+          # 1. 先尝试克隆远程已有的 maven 分支
+          git clone --depth 1 --branch maven https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} . || git init -b maven
+          
+          # 2. 执行 mvn install (它会把新版本加入到现有目录中)
           while IFS= read -r artifact || [ -n "$artifact" ]; do
             [ -z "$artifact" ] && continue
             ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//')
-            echo "📤 Deploying $ARTIFACT_ID version $APP_VERSION"
-          
-            mvn deploy:deploy-file \
+            mvn install:install-file \
               -Dfile="$TARGET_DIR/$artifact" \
               -DgroupId=com.fongmi.media3 \
               -DartifactId=$ARTIFACT_ID \
               -Dversion=$APP_VERSION \
               -Dpackaging=aar \
-              -DrepositoryId=github \
-              -Durl=https://maven.pkg.github.com/${{ github.repository }}
+              -DlocalRepositoryPath=$(pwd)
           done < "$AAR_LIST_FILE"
+          # 3. 提交并推送（不使用 --force）
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Add version $APP_VERSION to maven repo"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} maven
 
       - name: 🗜️ Create Release
         if: steps.fetch-commit.outputs.should_build == 'true'
@@ -124,7 +121,7 @@ jobs:
             ✨ **Media3 FongMi AAR 自动构建** ✨
             - 🏷️ 版本: `${{ env.APP_VERSION }}`
             - 🔗 源码分支: `${{ env.SOURCE_BRANCH }}`
-            - 📅 构建时间: $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
+            - 📅 构建时间: `${{ env.BUILD_TIME }}`
           files: |
             ${{ env.TARGET_DIR }}/*.aar
             ${{ env.HASH_FILE }}
