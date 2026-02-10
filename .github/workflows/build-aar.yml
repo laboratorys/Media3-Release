@@ -1,188 +1,130 @@
 name: 📦 Build and Release
 on:
   schedule:
-    - cron: '* */1 * * *'
+    - cron: '0 */1 * * *'
   workflow_dispatch:
     inputs:
       force:
         description: "跳过 commit 检查强制构建"
         required: false
         default: "true"
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:  # 全局环境变量
+    env:  # 统一管理所有变量
       SOURCE_REPO: "FongMi/media"
       SOURCE_BRANCH: "release-1.9.2-fongmi"
+      APP_VERSION: "release-1.9.2-fongmi" # 提取的版本号变量
       SOURCE_DIR: ${{ github.workspace }}/_source
-      LIB_DIR: ${{ github.workspace }}/_source/libraries  # 使用 GitHub 预定义的工作目录
+      LIB_DIR: ${{ github.workspace }}/_source/libraries
       TARGET_DIR: ${{ github.workspace }}/_source/target
       HASH_FILE: ${{ github.workspace }}/_source/target/hash.txt
+      AAR_LIST_FILE: ${{ github.workspace }}/aar_list.txt
       FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' }}
+
     steps:
       - name: 🛎️ Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: 🔍 Fetch latest commit from FongMi/media
+
+      - name: 🔍 Fetch latest commit
         id: fetch-commit
         run: |
           if [ "$FORCE_BUILD" = "true" ]; then
-           echo "::notice::手动触发强制构建，跳过 commit 检查"
             echo "should_build=true" >> $GITHUB_OUTPUT
-           exit 0
+            exit 0
           fi
           LATEST_COMMIT=$(curl -sH "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/$SOURCE_REPO/commits/$SOURCE_BRANCH" | jq -r '.sha')
-          echo "Latest commit: $LATEST_COMMIT"
           echo "commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
-          
-          if [ -f .last_known_commit ]; then
-            LAST_KNOWN=$(cat .last_known_commit)
-            echo "Last known commit: $LAST_KNOWN"
-          else
-            LAST_KNOWN=""
-            echo "No previous commit record found"
-          fi
-          
-          if [ "$LATEST_COMMIT" != "$LAST_KNOWN" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-          else
-           echo "should_build=false" >> $GITHUB_OUTPUT
-          fi
-      - name: ⏩ Skip build if no changes
-        if: steps.check-build.outputs.should_build == 'false'
-        run: echo "🔄 No new commits, skipping build."
+          LAST_KNOWN=$(cat .last_known_commit 2>/dev/null || echo "")
+          [ "$LATEST_COMMIT" != "$LAST_KNOWN" ] && echo "should_build=true" >> $GITHUB_OUTPUT || echo "should_build=false" >> $GITHUB_OUTPUT
+
       - name: 🛠️ Clone FongMi/media
         if: steps.fetch-commit.outputs.should_build == 'true'
-        run: |
-          git clone --depth 1 --branch $SOURCE_BRANCH \
-          https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/$SOURCE_REPO.git $SOURCE_DIR
+        run: git clone --depth 1 --branch $SOURCE_BRANCH https://github.com/$SOURCE_REPO.git $SOURCE_DIR
+
       - name: 💾 Persist new commit hash
-        if: steps.fetch-commit.outputs.should_build == 'true'
+        if: steps.fetch-commit.outputs.should_build == 'true' && github.event_name != 'workflow_dispatch'
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "🛑 手动执行模式：跳过 .last_known_commit 更新"
-            exit 0
-          fi
-          mkdir -p $(dirname .last_known_commit)
-           if [ ! -f .last_known_commit ] || 
-              [ "$(cat .last_known_commit)" != "${{ steps.fetch-commit.outputs.commit }}" ]; then
-              echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
-              git config --global user.name "github-actions[bot]"
-              git config --global user.email "github-actions[bot]@users.noreply.github.com"
-              if ! grep -q "_source/" .gitignore; then
-                echo "_source/" >> .gitignore
-                git add .gitignore
-                git commit -m "Add _source to gitignore [skip ci]"
-              fi
-              git fetch origin
-              git merge --no-edit origin/${{ github.ref_name }}
-              git add .last_known_commit
-              git commit -m "Update tracked commit to ${{ steps.fetch-commit.outputs.commit }} [skip ci]"
-              for i in {1..3}; do git push origin ${{ github.ref }} && break || sleep 5; done
-           else
-              echo "✅ .last_known_commit 已是最新，无需更新"
-           fi
+          echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last_known_commit
+          git commit -m "Update tracked commit [skip ci]" || exit 0
+          git push origin HEAD:${{ github.ref_name }}
+
       - name: ☕ Set up JDK 17
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: 17
           distribution: 'temurin'
-      - name: 🔨 Build AAR
+          server-id: github
+
+      - name: 🔨 Build and Collect AARs
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
           cd $SOURCE_DIR
           ./gradlew assembleRelease
           mkdir -p "$TARGET_DIR"
-          echo "🔍 Source dir: $LIB_DIR"
-          echo "🎯 Target dir: $TARGET_DIR"
+          
           echo "# 📝 MD5 Checksums" > "$HASH_FILE"
           echo "# Generated at $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')" >> "$HASH_FILE"
-          echo "" >> "$HASH_FILE"
-          AAR_LIST_TMP="${{ github.workspace }}/aar_list.txt"
-          touch "$AAR_LIST_TMP"
+          
+          touch "$AAR_LIST_FILE"
           find "$LIB_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
-            cp -v "$aar_file" "$TARGET_DIR/"
-            md5sum "$aar_file" | awk -v filename=$(basename "$aar_file") '{print filename " " $1}' >> "$HASH_FILE"
-            echo "$filename" >> "$AAR_LIST_TMP"
-            echo "✅ Copied: $filename"
+            cp "$aar_file" "$TARGET_DIR/"
+            md5sum "$aar_file" | awk '{print $1}' | xargs -I {} echo "$filename {}" >> "$HASH_FILE"
+            echo "$filename" >> "$AAR_LIST_FILE"
           done
-          echo ""
-          echo "📦 Generated AAR files:"
-          ls -lh "$TARGET_DIR"
-          echo ""
-          echo "🔏 MD5 Checksums:"
-          cat "$HASH_FILE"
-      - name: 📤 Upload artifacts
-        if: steps.fetch-commit.outputs.should_build == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-aars
-          path: |
-            ${{ env.TARGET_DIR }}/*.aar
-            ${{ env.HASH_FILE }}
-      - name: ⏱️ Generate current time
-        if: steps.fetch-commit.outputs.should_build == 'true'
-        id: datetime
-        run: |
-          CURRENT_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')
-          echo "CURRENT_TIME=$CURRENT_TIME" >> $GITHUB_OUTPUT
-      - name: 📦 Publish All AARs to GitHub Packages
-        if: steps.fetch-commit.outputs.should_build == 'true'
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GROUP_ID: com.fongmi.media3
-          VERSION: release-1.9.2-fongmi
-          REPO_URL: https://maven.pkg.github.com/${{ github.repository }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y maven
 
-          while IFS= read -r artifact; do
+      - name: 📦 Publish All AARs
+        if: steps.fetch-commit.outputs.should_build == 'true'
+        run: |
+          # 动态配置 Maven 认证
+          mkdir -p ~/.m2
+          cat <<EOF > ~/.m2/settings.xml
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${{ github.actor }}</username>
+                <password>${{ secrets.GITHUB_TOKEN }}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+          while IFS= read -r artifact || [ -n "$artifact" ]; do
             [ -z "$artifact" ] && continue
-            echo "➡️ Processing AAR: $artifact"
-
-            AAR_PATH="$TARGET_DIR/$artifact"
-            if [ ! -f "$AAR_PATH" ]; then
-              echo "⚠️ File not found: $AAR_PATH"
-              continue
-            fi
-
-            # 提取 artifactId（去掉后缀 -release.aar → lib-core）
             ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//')
-            echo "📤 Deploying $GROUP_ID:$ARTIFACT_ID:$VERSION"
-
+            echo "📤 Deploying $ARTIFACT_ID version $APP_VERSION"
+          
             mvn deploy:deploy-file \
-              -Dfile="$AAR_PATH" \
-              -DgroupId=$GROUP_ID \
+              -Dfile="$TARGET_DIR/$artifact" \
+              -DgroupId=com.fongmi.media3 \
               -DartifactId=$ARTIFACT_ID \
-              -Dversion=$VERSION \
+              -Dversion=$APP_VERSION \
               -Dpackaging=aar \
               -DrepositoryId=github \
-              -Durl=$REPO_URL \
-              -DretryFailedDeploymentCount=3 || {
-                echo "❌ Failed to upload $artifact"
-                exit 1
-              }
-          done < "${{ github.workspace }}/aar_list.txt"
-      - name: 🗜️ Upload to Release
+              -Durl=https://maven.pkg.github.com/${{ github.repository }}
+          done < "$AAR_LIST_FILE"
+
+      - name: 🗜️ Create Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v1.9.2-fongmi"
-          name: "📱 Media3 Release"
+          tag_name: "v${{ env.APP_VERSION }}" # 自动加上 'v' 前缀
+          name: "📱 Media3 Release (${{ env.APP_VERSION }})"
           body: |
-            ✨ **Media3 fongmi AAR Build** ✨
-            
-            ### 📦 Release Info
-            - 🏷️ Version: v1.9.2-fongmi
-            - 📅 Build Date: ${{ steps.datetime.outputs.CURRENT_TIME }}
-            - 🔐 Checksum: [hash.txt](https://github.com/${{ github.repository }}/releases/download/v1.9.2-fongmi/hash.txt)
+            ✨ **Media3 FongMi AAR 自动构建** ✨
+            - 🏷️ 版本: `${{ env.APP_VERSION }}`
+            - 🔗 源码分支: `${{ env.SOURCE_BRANCH }}`
+            - 📅 构建时间: $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
           files: |
             ${{ env.TARGET_DIR }}/*.aar
             ${{ env.HASH_FILE }}
-          token: ${{ secrets.GITHUB_TOKEN }}
