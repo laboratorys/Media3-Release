@@ -17,7 +17,6 @@ jobs:
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries  # 使用 GitHub 预定义的工作目录
       TARGET_DIR: ${{ github.workspace }}/_source/target
-      MOVE_LIST: ${{ github.workspace }}/_source/move.txt
       HASH_FILE: ${{ github.workspace }}/_source/target/hash.txt
       FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' }}
     steps:
@@ -100,19 +99,17 @@ jobs:
           mkdir -p "$TARGET_DIR"
           echo "🔍 Source dir: $LIB_DIR"
           echo "🎯 Target dir: $TARGET_DIR"
-          echo "📋 Move list: $MOVE_LIST"
           echo "# 📝 MD5 Checksums" > "$HASH_FILE"
           echo "# Generated at $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')" >> "$HASH_FILE"
           echo "" >> "$HASH_FILE"
+          AAR_LIST_TMP="${{ github.workspace }}/aar_list.txt"
+          touch "$AAR_LIST_TMP"
           find "$LIB_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
-            if grep -qFx "$filename" "$MOVE_LIST"; then
-              cp -v "$aar_file" "$TARGET_DIR/"
-              md5sum "$aar_file" | awk -v filename=$(basename "$aar_file") '{print filename " " $1}' >> "$HASH_FILE"
-              echo "✅ Copied: $filename"
-            else
-              echo "⏩ Skipped: $filename"
-            fi
+            cp -v "$aar_file" "$TARGET_DIR/"
+            md5sum "$aar_file" | awk -v filename=$(basename "$aar_file") '{print filename " " $1}' >> "$HASH_FILE"
+            echo "$filename" >> "$AAR_LIST_TMP"
+            echo "✅ Copied: $filename"
           done
           echo ""
           echo "📦 Generated AAR files:"
@@ -171,7 +168,7 @@ jobs:
                 echo "❌ Failed to upload $artifact"
                 exit 1
               }
-          done < "$MOVE_LIST"
+          done < "${{ github.workspace }}/aar_list.txt"
       - name: 🗜️ Upload to Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
