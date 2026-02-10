@@ -99,7 +99,7 @@ jobs:
           
             mvn install:install-file \
               -Dfile="$TARGET_DIR/$artifact" \
-              -DgroupId=com.fongmi.media3 \
+              -DgroupId=androidx.media3 \
               -DartifactId=$ARTIFACT_ID \
               -Dversion=$MAVEN_VERSION \
               -Dpackaging=aar \
