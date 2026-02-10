@@ -15,7 +15,7 @@ jobs:
     env:  # 统一管理所有变量
       SOURCE_REPO: "FongMi/media"
       SOURCE_BRANCH: "release-1.9.2-fongmi"
-      APP_VERSION: "release-1.9.2-fongmi" # 提取的版本号变量
+      APP_VERSION: "1.9.2-fongmi" # 提取的版本号变量
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries
       TARGET_DIR: ${{ github.workspace }}/_source/target
