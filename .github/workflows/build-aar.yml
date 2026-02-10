@@ -15,7 +15,8 @@ jobs:
     env:  # 统一管理所有变量
       SOURCE_REPO: "FongMi/media"
       SOURCE_BRANCH: "release-1.9.2-fongmi"
-      APP_VERSION: "1.9.2-fongmi" # 提取的版本号变量
+      APP_VERSION: "1.9.2-fongmi"
+      MAVEN_VERSION: "1.9.2"
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries
       TARGET_DIR: ${{ github.workspace }}/_source/target
@@ -89,26 +90,26 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/repo-deploy
           cd $GITHUB_WORKSPACE/repo-deploy
           
-          # 1. 先尝试克隆远程已有的 maven 分支
+          # 克隆现有分支以保留历史版本
           git clone --depth 1 --branch maven https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} . || git init -b maven
           
-          # 2. 执行 mvn install (它会把新版本加入到现有目录中)
           while IFS= read -r artifact || [ -n "$artifact" ]; do
             [ -z "$artifact" ] && continue
             ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//')
+          
             mvn install:install-file \
               -Dfile="$TARGET_DIR/$artifact" \
               -DgroupId=com.fongmi.media3 \
               -DartifactId=$ARTIFACT_ID \
-              -Dversion=$APP_VERSION \
+              -Dversion=$MAVEN_VERSION \
               -Dpackaging=aar \
               -DlocalRepositoryPath=$(pwd)
           done < "$AAR_LIST_FILE"
-          # 3. 提交并推送（不使用 --force）
+          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Add version $APP_VERSION to maven repo"
+          git commit -m "Add version $MAVEN_VERSION to maven repo"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} maven
 
       - name: 🗜️ Create Release
