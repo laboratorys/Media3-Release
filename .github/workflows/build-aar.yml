@@ -4,19 +4,36 @@ on:
     - cron: '0 */1 * * *'
   workflow_dispatch:
     inputs:
+      source_branch:
+        description: "1. 源码分支 (Source Branch)"
+        required: false
+        default: "release-1.9.2-fongmi"
+      maven_version:
+        description: "2. Maven 依赖版本 (e.g. 1.9.2)"
+        required: false
+        default: "1.9.2"
+      app_version:
+        description: "3. Release 标签版本 (e.g. 1.9.2-fongmi)"
+        required: false
+        default: "1.9.2-fongmi"
       force:
         description: "跳过 commit 检查强制构建"
         required: false
         default: "true"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:  # 统一管理所有变量
+    env:
       SOURCE_REPO: "FongMi/media"
-      SOURCE_BRANCH: "release-1.9.2-fongmi"
-      APP_VERSION: "1.9.2-fongmi"
-      MAVEN_VERSION: "1.9.2"
+      # 优先级：手动输入 > 默认值
+      SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'release-1.9.2-fongmi' }}
+      MAVEN_VERSION: ${{ github.event.inputs.maven_version || '1.9.2' }}
+      APP_VERSION: ${{ github.event.inputs.app_version || '1.9.2-fongmi' }}
+
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries
       TARGET_DIR: ${{ github.workspace }}/_source/target
@@ -33,29 +50,26 @@ jobs:
       - name: 🔍 Fetch latest commit
         id: fetch-commit
         run: |
-          if [ "$FORCE_BUILD" = "true" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
           LATEST_COMMIT=$(curl -sH "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/$SOURCE_REPO/commits/$SOURCE_BRANCH" | jq -r '.sha')
+          
+          if [ "$LATEST_COMMIT" == "null" ] || [ -z "$LATEST_COMMIT" ]; then
+            echo "❌ 错误: 找不到分支 $SOURCE_BRANCH 或 API 请求失败"
+            exit 1
+          fi
+          
           echo "commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
-          LAST_KNOWN=$(cat .last_known_commit 2>/dev/null || echo "")
-          [ "$LATEST_COMMIT" != "$LAST_KNOWN" ] && echo "should_build=true" >> $GITHUB_OUTPUT || echo "should_build=false" >> $GITHUB_OUTPUT
+          
+          if [ "$FORCE_BUILD" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            LAST_KNOWN=$(cat .last_known_commit 2>/dev/null || echo "")
+            [ "$LATEST_COMMIT" != "$LAST_KNOWN" ] && echo "should_build=true" >> $GITHUB_OUTPUT || echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: 🛠️ Clone FongMi/media
+      - name: 🛠️ Clone Source
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: git clone --depth 1 --branch $SOURCE_BRANCH https://github.com/$SOURCE_REPO.git $SOURCE_DIR
-
-      - name: 💾 Persist new commit hash
-        if: steps.fetch-commit.outputs.should_build == 'true' && github.event_name != 'workflow_dispatch'
-        run: |
-          echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .last_known_commit
-          git commit -m "Update tracked commit [skip ci]" || exit 0
-          git push origin HEAD:${{ github.ref_name }}
 
       - name: ☕ Set up JDK 17
         if: steps.fetch-commit.outputs.should_build == 'true'
@@ -63,39 +77,45 @@ jobs:
         with:
           java-version: 17
           distribution: 'temurin'
-          server-id: github
 
       - name: 🔨 Build and Collect AARs
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
           cd $SOURCE_DIR
+          chmod +x ./gradlew
           ./gradlew assembleRelease
+          
           mkdir -p "$TARGET_DIR"
           SH_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
           echo "BUILD_TIME=$SH_TIME" >> $GITHUB_ENV
-          echo "# 📝 MD5 Checksums" > "$HASH_FILE"
-          echo "# Generated at $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')" >> "$HASH_FILE"
           
-          touch "$AAR_LIST_FILE"
-          find "$LIB_DIR" -name "lib-*-release.aar" | while read -r aar_file; do
+          echo "# 📝 MD5 Checksums" > "$HASH_FILE"
+          echo "# Generated at $SH_TIME" >> "$HASH_FILE"
+          
+          > "$AAR_LIST_FILE"
+          find "$LIB_DIR" -name "*-release.aar" | while read -r aar_file; do
             filename=$(basename "$aar_file")
             cp "$aar_file" "$TARGET_DIR/"
-            md5sum "$aar_file" | awk '{print $1}' | xargs -I {} echo "$filename {}" >> "$HASH_FILE"
+            md5=$(md5sum "$aar_file" | awk '{print $1}')
+            echo "$filename $md5" >> "$HASH_FILE"
             echo "$filename" >> "$AAR_LIST_FILE"
           done
 
       - name: 🚀 Push to Maven Branch
         if: steps.fetch-commit.outputs.should_build == 'true'
         run: |
-          mkdir -p $GITHUB_WORKSPACE/repo-deploy
-          cd $GITHUB_WORKSPACE/repo-deploy
+          DEPLOY_PATH="$GITHUB_WORKSPACE/repo-deploy"
+          git clone --depth 1 --branch maven https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} $DEPLOY_PATH || {
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
+            git init -b maven
+            git remote add origin https://github.com/${{ github.repository }}
+          }
           
-          # 克隆现有分支以保留历史版本
-          git clone --depth 1 --branch maven https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} . || git init -b maven
-          
-          while IFS= read -r artifact || [ -n "$artifact" ]; do
+          cd $DEPLOY_PATH
+          while IFS= read -r artifact; do
             [ -z "$artifact" ] && continue
-            ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//')
+            ARTIFACT_ID=$(echo "$artifact" | sed 's/-release\.aar$//; s/\.aar$//')
           
             mvn install:install-file \
               -Dfile="$TARGET_DIR/$artifact" \
@@ -103,25 +123,40 @@ jobs:
               -DartifactId=$ARTIFACT_ID \
               -Dversion=$MAVEN_VERSION \
               -Dpackaging=aar \
-              -DlocalRepositoryPath=$(pwd)
+              -DgeneratePom=true \
+              -DlocalRepositoryPath=$DEPLOY_PATH
           done < "$AAR_LIST_FILE"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Add version $MAVEN_VERSION to maven repo"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} maven
+          git commit -m "Deploy version $MAVEN_VERSION (Branch: $SOURCE_BRANCH)" || exit 0
+          git push origin maven
+
+      - name: 💾 Update Last Commit Info
+        # 只有在 schedule 自动运行且构建成功时，才更新 commit 追踪文件
+        if: steps.fetch-commit.outputs.should_build == 'true' && github.event_name == 'schedule'
+        run: |
+          echo "${{ steps.fetch-commit.outputs.commit }}" > .last_known_commit
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last_known_commit
+          git commit -m "Update tracked commit [skip ci]" || exit 0
+          git push origin HEAD:${{ github.ref_name }}
 
       - name: 🗜️ Create Release
         if: steps.fetch-commit.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ env.APP_VERSION }}" # 自动加上 'v' 前缀
-          name: "📱 Media3 Release (${{ env.APP_VERSION }})"
+          tag_name: "v${{ env.APP_VERSION }}"
+          name: "Release v${{ env.APP_VERSION }}"
+          prerelease: true
           body: |
             ✨ **Media3 FongMi AAR 自动构建** ✨
-            - 🏷️ 版本: `${{ env.APP_VERSION }}`
-            - 🔗 源码分支: `${{ env.SOURCE_BRANCH }}`
+            - 🌿 源码分支: `${{ env.SOURCE_BRANCH }}`
+            - 📦 Maven 版本: `${{ env.MAVEN_VERSION }}`
+            - 🏷️ Release 版本: `${{ env.APP_VERSION }}`
+            - 🔗 源码 commit: `${{ steps.fetch-commit.outputs.commit }}`
             - 📅 构建时间: `${{ env.BUILD_TIME }}`
           files: |
             ${{ env.TARGET_DIR }}/*.aar
