@@ -30,9 +30,9 @@ jobs:
     env:
       SOURCE_REPO: "FongMi/media"
       # 优先级：手动输入 > 默认值
-      SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'release-1.9.2-fongmi' }}
-      MAVEN_VERSION: ${{ github.event.inputs.maven_version || '1.9.2' }}
-      APP_VERSION: ${{ github.event.inputs.app_version || '1.9.2-fongmi' }}
+      SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'release-1.9.3-fongmi' }}
+      MAVEN_VERSION: ${{ github.event.inputs.maven_version || '1.9.3' }}
+      APP_VERSION: ${{ github.event.inputs.app_version || '1.9.3-fongmi' }}
 
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries
