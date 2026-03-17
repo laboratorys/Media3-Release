@@ -7,15 +7,15 @@ on:
       source_branch:
         description: "1. 源码分支 (Source Branch)"
         required: false
-        default: "release-1.9.2-fongmi"
+        default: "release-1.9.3-fongmi"
       maven_version:
         description: "2. Maven 依赖版本 (e.g. 1.9.2)"
         required: false
-        default: "1.9.2"
+        default: "1.9.3"
       app_version:
         description: "3. Release 标签版本 (e.g. 1.9.2-fongmi)"
         required: false
-        default: "1.9.2-fongmi"
+        default: "1.9.3-fongmi"
       force:
         description: "跳过 commit 检查强制构建"
         required: false
