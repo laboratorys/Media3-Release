@@ -9,11 +9,11 @@ on:
         required: false
         default: "release-1.9.3-fongmi"
       maven_version:
-        description: "2. Maven 依赖版本 (e.g. 1.9.2)"
+        description: "2. Maven 依赖版本 (e.g. 1.9.3)"
         required: false
         default: "1.9.3"
       app_version:
-        description: "3. Release 标签版本 (e.g. 1.9.2-fongmi)"
+        description: "3. Release 标签版本 (e.g. 1.9.3-fongmi)"
         required: false
         default: "1.9.3-fongmi"
       force:
