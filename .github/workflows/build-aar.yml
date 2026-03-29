@@ -7,15 +7,15 @@ on:
       source_branch:
         description: "1. 源码分支 (Source Branch)"
         required: false
-        default: "release-1.9.3-fongmi"
+        default: "release-1.10.0-fongmi"
       maven_version:
-        description: "2. Maven 依赖版本 (e.g. 1.9.3)"
+        description: "2. Maven 依赖版本 (e.g. 1.10.0)"
         required: false
-        default: "1.9.3"
+        default: "1.10.0"
       app_version:
-        description: "3. Release 标签版本 (e.g. 1.9.3-fongmi)"
+        description: "3. Release 标签版本 (e.g. 1.10.0-fongmi)"
         required: false
-        default: "1.9.3-fongmi"
+        default: "1.10.0-fongmi"
       force:
         description: "跳过 commit 检查强制构建"
         required: false
@@ -30,9 +30,9 @@ jobs:
     env:
       SOURCE_REPO: "FongMi/media"
       # 优先级：手动输入 > 默认值
-      SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'release-1.9.3-fongmi' }}
-      MAVEN_VERSION: ${{ github.event.inputs.maven_version || '1.9.3' }}
-      APP_VERSION: ${{ github.event.inputs.app_version || '1.9.3-fongmi' }}
+      SOURCE_BRANCH: ${{ github.event.inputs.source_branch || 'release-1.10.0-fongmi' }}
+      MAVEN_VERSION: ${{ github.event.inputs.maven_version || '1.10.0' }}
+      APP_VERSION: ${{ github.event.inputs.app_version || '1.10.0-fongmi' }}
 
       SOURCE_DIR: ${{ github.workspace }}/_source
       LIB_DIR: ${{ github.workspace }}/_source/libraries
