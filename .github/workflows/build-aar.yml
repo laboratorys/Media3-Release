@@ -11,7 +11,7 @@ on:
       maven_version:
         description: "2. Maven 依赖版本 (e.g. 1.10.1)"
         required: false
-        default: "1.10.0"
+        default: "1.10.1"
       app_version:
         description: "3. Release 标签版本 (e.g. 1.10.1-fongmi)"
         required: false
@@ -83,7 +83,26 @@ jobs:
         run: |
           cd $SOURCE_DIR
           chmod +x ./gradlew
-          ./gradlew assembleRelease
+          ./gradlew \
+            :lib-common:assembleRelease \
+            :lib-container:assembleRelease \
+            :lib-database:assembleRelease \
+            :lib-datasource:assembleRelease \
+            :lib-datasource-okhttp:assembleRelease \
+            :lib-datasource-rtmp:assembleRelease \
+            :lib-decoder:assembleRelease \
+            :lib-decoder-av1:assembleRelease \
+            :lib-decoder-mpegh:assembleRelease \
+            :lib-effect:assembleRelease \
+            :lib-exoplayer:assembleRelease \
+            :lib-exoplayer-dash:assembleRelease \
+            :lib-exoplayer-hls:assembleRelease \
+            :lib-exoplayer-rtsp:assembleRelease \
+            :lib-exoplayer-smoothstreaming:assembleRelease \
+            :lib-extractor:assembleRelease \
+            :lib-session:assembleRelease \
+            :lib-ui:assembleRelease \
+            :lib-ui-danmaku:assembleRelease
           
           mkdir -p "$TARGET_DIR"
           SH_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
